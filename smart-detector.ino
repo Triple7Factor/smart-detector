@@ -12,23 +12,33 @@
  *
  */
 
-// Include libraries for communication & SmartThings integration
+// Include libraries for communication, LED control, and SmartThings integration
 #include <SoftwareSerial.h>
+#include <Adafruit_NeoPixel.h>
 #include <SmartThings.h>
 
-// Set arduino input/output pins and create smartthing object for communicating with SmartThings Shield
+// Set arduino input/output pins
 #define PIN_THING_RX    3
 #define PIN_THING_TX    2
-#define LED_PIN         13
+#define LED_PIN         6
 
+// Create smartthing object for communicating with SmartThings Shield
 SmartThingsCallout_t messageCallout;
 SmartThings smartthing(PIN_THING_RX, PIN_THING_TX, messageCallout);
 
+// Create neopixel object for controlling LED strip
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(3, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+// ------- GLOBAL VARIABLES -------
 // Enable debug for additional logging
 bool isDebugEnabled;
 
 // Determines if LED is on or off
 int stateLED;
+
+// Sound level
+int soundLevel = 0;
+
 
 // ------- SETUP -------
 // Initial setup of the Arduino and SmartThings shield
@@ -37,10 +47,10 @@ void setup() {
   // Set up default state of global variables
   isDebugEnabled = true;
   stateLED = 0;
-  
-  // Set up LED pins so LED is off to match stateLED 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+
+  // Initialize all LEDs to off
+  strip.begin();
+  strip.show();
 
   // Log setup to serial output for debugging
   if (isDebugEnabled) {
@@ -53,7 +63,17 @@ void setup() {
 // ------- MAIN LOOP -------
 // This defines the main behavior of the device
 void loop() {
+
+  // TODO: Check the mic for input level and update the LEDs
+  /*
+  soundLevel += 1;
+  if (soundLevel > 100) soundLevel = 0;
   
+  Serial.print("Level: ");
+  Serial.print(soundLevel);
+  Serial.println("' ");
+  displayLights (soundLevel);
+   */
   // Initiate the shield to start waiting for events
   smartthing.run();
   
@@ -129,6 +149,9 @@ void calibrate() {
   
   // Log success
   Serial.println("Calibration success!");
+
+  // Respond with sound level
+  smartthing.send("0");
   
 }
 
@@ -149,6 +172,50 @@ void test() {
   // Log success
     Serial.println("Test success!");
   
+}
+
+// ------- DISPLAY STATUS -------
+// Animate the lights based on sound level from 0-100
+void displayLights (int level) {
+
+  // Ensure value is within appropriate limits
+  if (level < 0) level = 0;
+  if (level > 100) level = 100;
+
+  // Working RGB values
+  int r = 0;
+  int g = 0;
+  int b = 0;
+
+  // Determine correct color for the level value
+  r = (level / 100) * 255;
+  g = ((100 - level) / 100) * 255;
+
+  // Set light colors
+  //theaterChase(strip.Color(r, g, 0), 50);
+
+/*
+  for(uint16_t i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, Wheel(level));
+    strip.show();
+    delay(50);
+  }
+*/
+
+  for (int q=0; q < 3; q++) {
+    for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+      strip.setPixelColor(i+q, Wheel(level));    //turn every third pixel on
+
+    }
+    strip.show();
+
+    delay((level * 2) + 50);
+
+    for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+      strip.setPixelColor(i+q, 0);        //turn every third pixel off
+
+    }
+  }
 }
 
 // ------- RAINBOW -------
@@ -188,7 +255,41 @@ void setThingLEDRainbow (int angle, SmartThings thing) {
 
   // Set RGB LED color
   thing.shieldSetLED(r, g, b);
-  
+
 }
 
+// ------- THEATER CHASE -------
+//Theatre-style crawling lights.
+void theaterChase(uint32_t c, uint8_t wait) {
+  for (int j=0; j<10; j++) {  //do 10 cycles of chasing
+    for (int q=0; q < 3; q++) {
+      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+        strip.setPixelColor(i+q, c);    //turn every third pixel on
+      }
+      strip.show();
+
+      delay(wait);
+
+      for (uint16_t i=0; i < strip.numPixels(); i=i+3) {
+        strip.setPixelColor(i+q, 0);        //turn every third pixel off
+      }
+    }
+  }
+}
+
+// ------- COLOR WHEEL -------
+// Sets the strip to a color of the rainbow from 0-255
+// 0 is red, up to 255 in the order red > orange > yellow, etc.
+uint32_t Wheel(byte WheelPos) {
+  WheelPos = 255 - WheelPos;
+  if(WheelPos < 85) {
+    return strip.Color(255 - WheelPos * 3, 0, WheelPos * 3);
+  }
+  if(WheelPos < 170) {
+    WheelPos -= 85;
+    return strip.Color(0, WheelPos * 3, 255 - WheelPos * 3);
+  }
+  WheelPos -= 170;
+  return strip.Color(WheelPos * 3, 255 - WheelPos * 3, 0);
+}
 

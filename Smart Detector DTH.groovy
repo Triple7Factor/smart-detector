@@ -24,6 +24,9 @@ metadata {
 		capability "Sensor"
 		capability "Sound Pressure Level"
 		
+		// Attributes: Device state for SPL capability
+		attribute "soundPressureLevel", "number"
+		
 		// Commands: Calibrate (device calibrates min/max sound levels)
 		command "startCalibration"
 	}
@@ -67,20 +70,12 @@ def parse(String description) {
 	// Translate the raw message from the device into a command (ie "on")
 	def value = zigbee.parse(description)?.text
 	
-	// Check to see which attribute u
-	
-	
-	
-	
 	// name = the name of the event, which is the attribute that stores the value (ie "switch")
 	def name = value in ["on","off"] ? "switch" : null
 	// linkText = the name of this event in the activity feed for this device
 	def linkText = getLinkText(device)
 
-	// Check to see what 
-	
-	
-	
+	/* Default arduino handler for on/off example
 	def descriptionText = getDescriptionText(description, linkText, value)
 	log.debug "Desc: '${descriptionText}'"
 	
@@ -97,17 +92,17 @@ def parse(String description) {
 		isStateChange: isStateChange,
 		displayed: displayed
 	]
+	*/
 
 	log.debug result.descriptionText
 	return result
 
 }
 // ------- INSTALLED -------
-// Defaults
+// Set default values for state information
 def installed() {
     sendEvent(name: "switch", value: "off")
     sendEvent(name: "soundPressureLevel", value: 42.0)
-
 }
 
 // ------- COMMANDS -------
@@ -125,6 +120,5 @@ def off() {
 
 // Start calibration
 def startCalibration() {
-	// TODO: start calibration code
-	zigbee.smartShield(text: "test").format()
+	zigbee.smartShield(text: "calibrate").format()
 }
