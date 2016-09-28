@@ -17,77 +17,127 @@
 #include <Adafruit_NeoPixel.h>
 #include <SmartThings.h>
 
-// Set arduino input/output pins
+// Set arduino input/output pins for ThingShield, the RGB strip's control pin, and the mic's input
 #define PIN_THING_RX    3
 #define PIN_THING_TX    2
 #define LED_PIN         6
+#define PIN_ANALOG_IN   A5
+
+// Global definitions to set various parameters; number of pixels in LED strip and number of readings to average for the mic
+#define NUM_PIXELS      27
+#define NUM_READINGS    10
 
 // Create smartthing object for communicating with SmartThings Shield
-SmartThingsCallout_t messageCallout;
-SmartThings smartthing(PIN_THING_RX, PIN_THING_TX, messageCallout);
+SmartThingsCallout_t messageHandler;
+SmartThings smartthing(PIN_THING_RX, PIN_THING_TX, messageHandler);
 
 // Create neopixel object for controlling LED strip
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(3, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_PIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
+
 
 // ------- GLOBAL VARIABLES -------
 // Enable debug for additional logging
-bool isDebugEnabled;
+bool isDebugEnabled = true;
 
 // Determines if LED is on or off
-int stateLED;
+bool stateLED = false;
 
-// Sound level
+// Sound pressure level
 int soundLevel = 0;
+
+// Keep track of time in milliseconds
+unsigned long curTime;
+unsigned long tempTime;
+
+// Average readings from mic
+int readings[NUM_READINGS];
+int readIndex = 0;
+int total = 0;
+int average = 0;
 
 
 // ------- SETUP -------
 // Initial setup of the Arduino and SmartThings shield
 void setup() {
-  
-  // Set up default state of global variables
-  isDebugEnabled = true;
-  stateLED = 0;
 
-  // Initialize all LEDs to off
+  // Initialize all LEDs in the strip to off
   strip.begin();
   strip.show();
 
-  // Log setup to serial output for debugging
+  // Initialize all readings to 0
+  for (int i = 0; i < NUM_READINGS; i++) {
+    readings[i] = 0;
+  }
+  
+  // Log to serial output for debugging
   if (isDebugEnabled) {
     Serial.begin(9600);
-    Serial.println("setup..");
+    Serial.println("Setup complete!");
   }
   
 }
+
 
 // ------- MAIN LOOP -------
 // This defines the main behavior of the device
 void loop() {
 
-  // TODO: Check the mic for input level and update the LEDs
-  /*
-  soundLevel += 1;
-  if (soundLevel > 100) soundLevel = 0;
+  // Set the starting time in milliseconds
+  curTime = millis();
   
-  Serial.print("Level: ");
-  Serial.print(soundLevel);
-  Serial.println("' ");
+  // Animate lights based on sound level
   displayLights (soundLevel);
-   */
-  // Initiate the shield to start waiting for events
+
+  // Check the shield for events from SmartThings
   smartthing.run();
+
+  // Continue reading from the mic until at least one full second has passed, averaging readings over time
+  while (millis() - curTime < 1000) {
+    // Subtract the last reading
+    total = total - readings[readIndex];
+    // Record the current sound level
+    readings[readIndex] = analogRead(PIN_ANALOG_IN);
+    // Add the reading to the total:
+    total = total + readings[readIndex];
+    // Advance to the next position in the array:
+    readIndex = readIndex + 1;
+
+    // Return to the first position when the end of the array is reached
+    if (readIndex >= NUM_READINGS) {
+      readIndex = 0;
+    }
+
+    delay(1);
+  }
+
+  // Calculate the average and record it
+  average = total / NUM_READINGS;
+
+  if (average > soundLevel) {
+    soundLevel++;
+  }
+  else {
+    soundLevel--;
+  }
+
+  if (isDebugEnabled) {
+    Serial.print("Sound Level: ");
+    Serial.print(soundLevel);
+    Serial.println("");
+  }
   
 }
 
+
 // ------- MESSAGE CALLOUT -------
 // Act on a message from the cloud
-void messageCallout(String message) {
+void messageHandler(String message) {
   
   // If debug is enabled print out the received message
   if (isDebugEnabled) {
     Serial.print("Received message: '");
     Serial.print(message);
-    Serial.println("' ");
+    Serial.println("'");
   }
 
   // Run appropriate function depending on the command received from SmartThings
@@ -108,7 +158,7 @@ void messageCallout(String message) {
 void on() {
   
   // Turn on the LED and set it to blue
-  stateLED = 1;
+  stateLED = true;
   digitalWrite(LED_PIN, HIGH);
   smartthing.shieldSetLED(0, 0, 1);
   
@@ -116,7 +166,7 @@ void on() {
   smartthing.send("on");
   
   // Record state for debugging
-  Serial.println("on");
+  Serial.println("Turned ON");
   
 }
 
@@ -125,7 +175,7 @@ void on() {
 void off() {
   
   // Turn off the LED
-  stateLED = 0;
+  stateLED = false;
   digitalWrite(LED_PIN, LOW);
   smartthing.shieldSetLED(0, 0, 0);
   
@@ -133,7 +183,7 @@ void off() {
   smartthing.send("off");
   
   // Record state for debugging
-  Serial.println("off");
+  Serial.println("Turned OFF");
   
 }
 
